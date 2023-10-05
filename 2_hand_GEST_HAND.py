@@ -34,11 +34,11 @@ class Mediapipe_BodyModule():
     def __init__(self):
         self.results = None
 
-    def print_result_gest(self, result: GestureRecognizerResult, output_image: mp.Image, timestamp_ms: int):
+    def print_result_gest(self, result: GestureRecognizerResult):
         print('gesture recognition result: {}'.format(result))
         self.results = result
 
-    def print_result_hand(self, result: HandLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
+    def print_result_hand(self, result: HandLandmarkerResult):
         print('hand landmarker result: {}'.format(result))
         self.results = result
 
@@ -78,6 +78,30 @@ class Mediapipe_BodyModule():
 
         return annotated_image
 
+    def put_gestures(self, annotated_image):    
+        self.lock.acquire()
+        gestures = self.current_gestures
+        self.lock.release()
+        y_pos = 50
+        for hand_gesture_name in gestures:
+            # show the prediction on the frame
+            cv2.putText(annotated_image, hand_gesture_name, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 0, 255), 2, cv2.LINE_AA)
+            y_pos += 50
+
+    def print_result_gest(self, result, output_image, timestamp_ms):
+        # print(f'gesture recognition result: {result}')
+        self.lock.acquire()  # solves potential concurrency issues
+        self.current_gestures = []
+        if result is not None and any(result.gestures):
+            print("Recognized gestures:")
+            for single_hand_gesture_data in result.gestures:
+                gesture_name = single_hand_gesture_data[0].category_name
+                print(gesture_name)
+                self.current_gestures.append(gesture_name)
+        self.lock.release()
+
+
     def main(self):
 
         options_gest = GestureRecognizerOptions(
@@ -110,7 +134,7 @@ class Mediapipe_BodyModule():
                 # Send live image data to perform gesture recognition
                 recognizer.recognize_async(mp_image, timestamp)
                 landmarker.detect_async(mp_image, timestamp)
-                if (not (self.results is None)):
+                if  (self.results is not None):
                     annotated_image = self.draw_landmarks_on_image(
                         mp_image.numpy_view(), self.results)
                     self.put_gestures(annotated_image)
@@ -125,30 +149,6 @@ class Mediapipe_BodyModule():
             # Release the VideoCapture and close all OpenCV windows
             cap.release()
             cv2.destroyAllWindows()
-
-    def put_gestures(self, annotated_image):
-        self.lock.acquire()
-        gestures = self.current_gestures
-        self.lock.release()
-        y_pos = 50
-        for hand_gesture_name in gestures:
-            # show the prediction on the frame
-            cv2.putText(annotated_image, hand_gesture_name, (10, y_pos), cv2.FONT_HERSHEY_SIMPLEX,
-                        1, (0, 0, 255), 2, cv2.LINE_AA)
-            y_pos += 50
-
-    def print_result_gest(self, result, output_image, timestamp_ms):
-        # print(f'gesture recognition result: {result}')
-        self.lock.acquire()  # solves potential concurrency issues
-        self.current_gestures = []
-        if result is not None and any(result.gestures):
-            print("Recognized gestures:")
-            for single_hand_gesture_data in result.gestures:
-                gesture_name = single_hand_gesture_data[0].category_name
-                print(gesture_name)
-                self.current_gestures.append(gesture_name)
-        self.lock.release()
-
 
 if __name__ == "__main__":
     body_module = Mediapipe_BodyModule()
